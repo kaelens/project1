@@ -19,15 +19,23 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Kaelen Saythongkham
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+Howdy! For this project, I decided to pick two datasets that I thought would create an interesting project. I chose one dataset (AKC_Breed_Info) that has the sizes of all dog breeds. It has the lower end of their height and weight as well as the upper end of their height and weight. I thought this was interesting because you could calculate both the range and average/mean height and weight for each breed.
+
+The next dataset I chose was dog_intelligence. I thought this dataset was particularly interesting because it contains a classification of the dog, which describes the breed type, as well as the probability it obeys on the first command, and the lower/upper limits of repetitions needed for that breed to understand a new command. 
+
+I was super interested in these sets together because the data allows for a multitude of different directions to go about determining if based on breed, does dog size affects their intelligence?
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
 
+# reading all my datasets in
+data1 <- read_csv("./AKC_Breed_Info.csv")
+data2 <- read_csv("./dog_intelligence.csv")
+data3 <- read_csv("./fci-breeds.csv")
 ```
 
 #### Tidying: Reshaping
@@ -35,56 +43,101 @@ Paragraph or two introducing your datasets and variables, why they are interesti
 If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
+#untidy and retidy dataset1
+data1 %>% pivot_wider(contains("height_low")) %>% pivot_longer(contains("height_low"))
 ```
 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+# number of rows and distinct rows in data1
+nrow(data1)
+nrow(distinct(data1))
 
-# your joining code
+# number of rows and distinct rows in data2
+nrow(data2)
+nrow(distinct(data2))
+
+# number of rows and distinct rows in data3
+nrow(data3)
+nrow(distinct(data3))
+
+# full join data1 and data2
+joined_data <- data1 %>% full_join(data2, by="Breed")
+
+# mutate dataset3 and join it with joined_data
+data3 <- data3 %>% mutate(Breed = str_to_title(name)) %>% select(Breed, section, country)
+full_data <- joined_data %>% full_join(data3, by="Breed")
+
+# number of rows and distinct rows in the joined datasets
+nrow(full_data)
+nrow(distinct(full_data))
+
+# getting all rows that one dataset has that the other does not
+data1 %>% anti_join(data2, by="Breed") %>% nrow()
+data1 %>% anti_join(data3, by="Breed") %>% nrow()
+data2 %>% anti_join(data1, by="Breed") %>% nrow()
+data2 %>% anti_join(data3, by="Breed") %>% nrow()
+data3 %>% anti_join(data1, by="Breed") %>% nrow()
+data3 %>% anti_join(data2, by="Breed") %>% nrow()
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+I did a full join in order to retain all columns of both datasets, since I wanted to analyze intelligence in dog breeds based on size and possibly location. Dataset1 contained 150 rows, which were all distinct and dataset2 contained 136 rows, which were also all distinct and dataset3 contained 354 rows, which were all distinct. There were 45 rows in dataset1 that were not in dataset2, 56 rows in dataset1 that were not in dataset3, 31 rows in dataset2 that were not in dataset1, 37 rows in dataset2 that were not in dataset3, 260 rows in dataset3 that were not in dataset1, and 255 rows in dataset3 that were not in dataset1. Thus, the joined dataset contains 422 rows, which are all distinct.
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+# converting all "n/a" values to NA and removing all NA 
+full_data %>% na_if("n/a") %>% na.omit() -> full_data
 
-# your wrangling code
+# updating the data to include avg_height and avg_weight
+full_data_updated <- full_data %>% select(Breed, height_low_inches, height_high_inches, weight_low_lbs, weight_high_lbs, Classification, obey, country, section) %>% group_by(Breed) %>% mutate(avg_height = ((as.integer(height_high_inches) + as.integer(height_low_inches))/2), avg_weight = ((as.integer(weight_low_lbs) + as.integer(weight_high_lbs))/2)) %>% arrange(desc(obey))
 
-# your wrangling code
+# create new columns for small and large dogs
+full_data_updated %>% mutate(size = ifelse(avg_height >= 18, "large", "small"), obey = toString(obey)) -> full_data_updated
+
+# remove percentage sign on obey variable and make an int
+full_data_updated %>% mutate(obey = str_replace_all(obey, "%", "")) %>% mutate(obey = as.integer(obey)) -> full_data_updated
+
+# group by classification and calculate summary stats
+full_data_updated  %>% na.omit() %>% group_by(Classification) %>% summarize(mean_height = mean(avg_height), mean_weight = mean(avg_weight), height_sd = sd(avg_height), count = n(), max_weight = max(avg_weight), min_height = min(avg_height), mean_obey = mean(obey)) %>% knitr::kable()
+
+calc_se <- function(sd, count) {
+  se <- sd/count
+  return(se)
+}
+
+# group by classification and size and calculate summary stats
+full_data_updated %>% na.omit() %>% group_by(size, Classification) %>% summarize(mean_obey = mean(obey), sd = sd(avg_height), count = n(), avg_height = avg_height, se = calc_se(sd, count), Breed = Breed) -> full_data_stats
+full_data_stats
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
-
+When first starting this project, I did not realize how much formatting and tidying would be required to do any sort of summary statistics. The most interesting thing was how similar the mean_obey for each classification was for large and small dogs. When I first calculated the mean_height for the classification, I was curious how different it would be for each size, which is based on height. I assumed that the size may have changed the temperament of the breed, but it seems to be relatively similar across the board! This implies that there may not be an obvious difference between intelligence of smaller dogs compared to the intelligence of larger dogs. This is assuming we base dog intelligence on their ability to obey a command on first try.
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+ggplot(data = full_data_stats) + geom_bar(stat="summary", aes(x=Breed, y=mean_obey, fill=size)) + geom_errorbar(aes(x = Breed, ymin = mean_obey - se, ymax = mean_obey + se),width=.5) + ggtitle("Average obey value for each breed of dog") + xlab("Dog breed") + ylab("Mean obey value") + theme_light() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 
-Your discussion of plot 1
+This graph is a little hard to read due to the number of different dog breeds, but it provides interesting data. The colouring by size highlights the differences between the mean obey values for each size. It may seem obvious that larger sizes have a larger obey value, but when looking at the distribution overall, there seems to be no difference.
 
 ```{R}
-# your plot 2
+ggplot(data = full_data_updated, aes(x = avg_height, fill = Classification)) + geom_density(alpha=0.8) + facet_grid(rows = vars(Classification)) + ggtitle("Distibution of average heights based on Classification") + xlab("Average height in inches") + ylab("Density") + scale_x_continuous(limits=c(0, 40)) + theme_minimal()
 ```
 
-Your discussion of plot 2
+This plot shows the distribution of the average heights based on the dog's classification. I thought this was particularly interesting because the distributions allow for a clearer picture of the average heights of each classification of dog. Some of them have a similar distribution, which then highlights the distribution of the "Brightest Dogs" and "Fair Working/Obedience Intelligence," which I thought was nice. 
 
 ```{R}
-# your plot 3
+ggplot(data = full_data_updated, aes(x=Breed, y=avg_height, color=Classification)) + geom_point() + geom_line() + ggtitle("Average height for each breed of dog") + xlab("Dog breed") + ylab("Average height") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), legend.title = element_text(size = 3), legend.text  = element_text(size = 5), legend.key.size = unit(1, "lines"))
 ```
 
-Your discussion of plot 3
+This graph looks a little messy due to the amount of dog breeds, but the colouring by classification shows that there is no obvious distinction between dog breeds, classification, and the average heights. I really liked this plot because it obviously shows that there is no distinction, while the other plots implied. 
 
 #### Concluding Remarks
 
-If any!
+This project was much harder than I anticipated. I went back and forth between datasets because I was not sure if they would cover what was needed or if there was sufficient data to complete the summary statistics. Overall, I concluded that there is not a sufficient difference between small and large dogs regarding intelligence. Larger dogs seem to have a greater average, but it is not sufficient enough to claim size influences intelligence.
 
 
 
